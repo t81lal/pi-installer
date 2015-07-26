@@ -1,5 +1,6 @@
 package org.nullbool.pi;
 
+import java.awt.Dimension;
 import java.io.File;
 import java.io.FileInputStream;
 import java.net.MalformedURLException;
@@ -11,7 +12,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
 
+import javax.swing.JFrame;
 import javax.swing.JOptionPane;
+import javax.swing.JProgressBar;
+import javax.swing.SwingUtilities;
 
 import org.nullbool.pi.installer.BlobRetriever;
 import org.nullbool.pi.installer.IOHelper;
@@ -38,12 +42,23 @@ public class Boot {
 	private static File[] jars = null;
 	private static File[] libs = null;
 	private static BundleContext context;
-
+	private static ProgressableInstaller view;
+	
 	public static void main(String[] args) {
 		try {
+			view = new ProgressableInstaller();
+			SwingUtilities.invokeLater(new Runnable(){
+				@Override
+				public void run() {
+					view.pack();
+					view.setLocationRelativeTo(null);
+					view.setVisible(true);
+				}
+			});
+			
 			jars = blob_it(P2_REPO_SITE);
 			libs = blob_it(UPDATE_SITE);
-			System.out.println("Launching");
+			out("Launching");
 			run();
 		} catch (Throwable e) {
 			e.printStackTrace();
@@ -172,7 +187,7 @@ public class Boot {
 		Bundle[] cxts = new Bundle[len];
 		for(int i=0; i < len; i++) {
 			cxts[i] = install(libs[i]);
-			System.out.println("Installing " + libs[i].getAbsolutePath());
+			out("Installing " + libs[i].getAbsolutePath());
 		}
 
 		fr: for(Bundle b : cxts) {
@@ -184,14 +199,14 @@ public class Boot {
 					String v = dict.get(s);
 					if(v != null) {
 						if(v.equals("lazy")) {
-							System.out.println("Skipping running " + b.getLocation());
+							out("Skipping running " + b.getLocation());
 							continue fr;
 						}
 					}
 				}
 			}
 			try {
-				System.out.println("Starting " + b.getLocation());
+				out("Starting " + b.getLocation());
 				b.start();
 			} catch (BundleException e1) {
 				e1.printStackTrace();
@@ -209,6 +224,13 @@ public class Boot {
 				break;
 			}
 		}
+		
+		view.dispose();
+	}
+	
+	private static void out(String s) {
+		System.out.println(s);
+		view.setTitle(s);
 	}
 
 	private static File[] getJARs() {
@@ -287,16 +309,16 @@ public class Boot {
 			}
 
 			File f = new File(base, b.getId());
-			System.out.println("Verifying: " + f.getAbsolutePath() + " ...");
+			out("Verifying: " + f.getAbsolutePath() + " ...");
 			if(!f.exists() || !b.verify(new FileInputStream(f))) {
-				System.out.println("Downloading from: " + b.getURL() + " ...");
+				out("Downloading from: " + b.getURL() + " ...");
 				IOHelper.download(b.getURL(), f);
-				System.out.println("newhash: " + Util.sha1(new FileInputStream(f)));
+				out("newhash: " + Util.sha1(new FileInputStream(f)));
 			}
 			System.out.println("... done.");
 			files[i++] = f;
 		}
-		System.out.println("Done verifying blobs.");
+		out("Done verifying blobs.");
 		return files;
 	}
 
@@ -313,5 +335,19 @@ public class Boot {
 
 	private static BlobRetriever<RemoteBlob> getImpl(URL url) {
 		return new RemoteBlobRetriever(url);
+	}
+	
+	private static class ProgressableInstaller extends JFrame {
+		private static final long serialVersionUID = -3640764301111014068L;
+		private final JProgressBar bar;
+		
+		public ProgressableInstaller() {
+			super("Installing...");
+			setDefaultCloseOperation(EXIT_ON_CLOSE);
+			setPreferredSize(new Dimension(300, 80));
+			bar = new JProgressBar();
+			bar.setIndeterminate(true);
+			add(bar);
+		}
 	}
 }
